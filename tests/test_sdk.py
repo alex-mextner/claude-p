@@ -27,7 +27,10 @@ def test_options_command_includes_stream_json():
 
 
 def test_console_scripts_declared():
-    import tomllib
+    try:
+        import tomllib  # Python 3.11+
+    except ModuleNotFoundError:  # Python 3.10
+        import tomli as tomllib
     from pathlib import Path
 
     data = tomllib.loads(Path("pyproject.toml").read_text())

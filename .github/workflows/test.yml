@@ -23,4 +23,4 @@ jobs:
       - name: Lint (ruff)
         run: uvx ruff check .
       - name: Test (pytest)
-        run: uv run --with pytest pytest tests/ -q
+        run: uv run --with pytest --with tomli pytest tests/ -q
