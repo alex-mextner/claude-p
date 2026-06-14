@@ -27,6 +27,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 import uuid
 
@@ -333,6 +334,108 @@ def workspace_trust_confirmation_visible(text: str) -> bool:
     return False
 
 
+def ensure_workspace_trusted(cwd: str) -> bool:
+    """Deterministically pre-accept Claude Code's workspace trust for ``cwd``.
+
+    claude-p is always invoked deliberately from a trusted context, so rather
+    than racing to press Enter on the interactive "Do you trust this folder?"
+    gate (see ``maybe_accept_workspace_trust_prompt``, which writes ``b"\\r"`` to
+    the PTY when it happens to spot the prompt and is therefore timing-dependent
+    and flaky), seed the trust flag directly in ``~/.claude.json`` BEFORE
+    launching claude. That keeps the auto-trust default deterministic; the PTY
+    keystroke path remains as a best-effort fallback.
+
+    Keyed by the RESOLVED real path: claude canonicalises cwd (``/tmp`` ->
+    ``/private/tmp``, symlinked dirs), so a raw-path key silently misses and the
+    prompt still fires. Returns True when ``cwd`` is trusted afterwards
+    (already-trusted or freshly seeded), False on any best-effort failure.
+
+    Conservative: skips the write when already trusted (no rewrite of the shared
+    config, no race window), only touches the one project entry, serialises
+    concurrent claude-p writers with an advisory flock on a sidecar lock file,
+    and swaps the file via a same-dir tempfile + atomic ``os.replace`` so a
+    concurrent reader never sees a half-write. Never raises.
+    """
+    cfg = Path.home() / ".claude.json"
+    if not cfg.exists():
+        return False
+    key = os.path.realpath(cwd)
+    lock = None
+    flock_mod = None
+    try:
+        try:
+            import fcntl as flock_mod
+        except ImportError:
+            flock_mod = None  # non-POSIX (e.g. Windows) -> unsynchronised, best-effort
+        if flock_mod is not None:
+            try:
+                lock = open(cfg.with_name(".claude.json.trust.lock"), "w")
+                flock_mod.flock(lock.fileno(), flock_mod.LOCK_EX)
+            except OSError:
+                if lock is not None:
+                    lock.close()
+                lock = None  # lock unavailable -> proceed unsynchronised
+        # Read-modify-write under the lock. The flock only serialises cooperating
+        # claude-p writers; `claude` itself rewrites ~/.claude.json without taking
+        # it, so re-read and re-merge if the file changed under us between read and
+        # replace, rather than clobbering that update. (os.replace stays atomic, so
+        # the worst residual race is a lost non-trust field, never corruption.)
+        for _attempt in range(3):
+            try:
+                mtime_before = cfg.stat().st_mtime_ns
+                data = json.loads(cfg.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                return False
+            if not isinstance(data, dict):
+                return False
+            projects = data.get("projects")
+            if projects is None:
+                projects = {}
+                data["projects"] = projects
+            elif not isinstance(projects, dict):
+                return False  # unexpected shape -> best-effort: never clobber it
+            entry = projects.get(key)
+            if (isinstance(entry, dict)
+                    and entry.get("hasTrustDialogAccepted") is True
+                    and entry.get("hasCompletedProjectOnboarding") is True):
+                return True  # already fully trusted -> leave the shared config untouched
+            entry = entry if isinstance(entry, dict) else {}
+            entry["hasTrustDialogAccepted"] = True
+            # Force both (a prior blocked attempt can leave onboarding=false, which still gates).
+            entry["hasCompletedProjectOnboarding"] = True
+            projects[key] = entry
+            tmp = None
+            try:
+                if cfg.stat().st_mtime_ns != mtime_before:
+                    continue  # changed under us between read and write -> re-read and re-merge
+                fd, tmp = tempfile.mkstemp(dir=str(cfg.parent), prefix=".claude.", suffix=".tmp")
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2)
+                os.replace(tmp, cfg)  # atomic: a concurrent reader never sees a half-write
+            except OSError:
+                if tmp is not None:
+                    try:
+                        os.unlink(tmp)
+                    except OSError:
+                        pass
+                return False
+            return True
+        return False  # gave up after repeated concurrent modification
+    finally:
+        if lock is not None:
+            # Best-effort cleanup: a raising unlock/close must not override the
+            # function's return value (it would surface as an unexpected error).
+            try:
+                if flock_mod is not None:
+                    flock_mod.flock(lock.fileno(), flock_mod.LOCK_UN)
+            except OSError:
+                pass
+            try:
+                lock.close()
+            except OSError:
+                pass
+
+
 def maybe_accept_workspace_trust_prompt(
     master_fd: int,
     transcript: str,
@@ -515,6 +618,12 @@ def run_tui(args: argparse.Namespace, stream_json: bool) -> tuple[str, str, int 
     append_optional_value(cmd, "--worktree", args.worktree)
 
     cmd.append(args.prompt)
+    # Deterministically pre-accept workspace trust before launching claude, so the
+    # headless run never has to race the interactive "Do you trust this folder?"
+    # gate on the PTY. The keystroke fallback below still covers the rare case
+    # where the seed could not be written. --no-auto-trust opts out of both.
+    if not args.no_auto_trust:
+        ensure_workspace_trusted(args.cwd)
     master, slave = pty.openpty()
     env = build_tui_env(args)
     start = time.time()
