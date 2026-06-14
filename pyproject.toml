@@ -25,9 +25,9 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/Equality-Machine/claude-p"
-Repository = "https://github.com/Equality-Machine/claude-p"
-Issues = "https://github.com/Equality-Machine/claude-p/issues"
+Homepage = "https://github.com/alex-mextner/claude-p"
+Repository = "https://github.com/alex-mextner/claude-p"
+Issues = "https://github.com/alex-mextner/claude-p/issues"
 
 [project.scripts]
 claude-p = "claude_p.cli:main"

@@ -5,7 +5,7 @@
 
 [![PyPI](https://img.shields.io/pypi/v/claude-p.svg)](https://pypi.org/project/claude-p/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![GitHub release](https://img.shields.io/github/v/release/Equality-Machine/claude-p)](https://github.com/Equality-Machine/claude-p/releases)
+[![GitHub release](https://img.shields.io/github/v/release/alex-mextner/claude-p)](https://github.com/alex-mextner/claude-p/releases)
 
 `claude-p` is a `claude -p` compatible CLI and Python SDK backed by the
 interactive Claude Code TUI.
@@ -220,7 +220,7 @@ CLAUDE_P_OK
 For an LLM/agent asked to install and verify this repository from source, use:
 
 ```bash
-git clone https://github.com/Equality-Machine/claude-p.git
+git clone https://github.com/alex-mextner/claude-p.git
 cd claude-p
 uv run --with pytest pytest tests -q
 uv tool install . --force
@@ -544,7 +544,7 @@ CLAUDE_P_OK
 如果把仓库交给另一个大模型/agent 安装和验证，让它按这组命令走：
 
 ```bash
-git clone https://github.com/Equality-Machine/claude-p.git
+git clone https://github.com/alex-mextner/claude-p.git
 cd claude-p
 uv run --with pytest pytest tests -q
 uv tool install . --force
