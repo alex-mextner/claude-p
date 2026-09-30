@@ -1,3 +1,13 @@
+> [!WARNING]
+> **Archived 2026-09-30 — this fork is obsolete. Use plain `claude -p` instead.**
+>
+> `claude-p` existed to drive the interactive Claude Code TUI under a PTY because
+> programmatic `claude -p` / `claude --print` did not work on a Claude.ai subscription
+> login. It works on the subscription again, so every caller has been migrated to the
+> native `claude -p` (review-cli, rig, tg-cli, agent-tools), the local `uv tool` install
+> was removed, and this repository is read-only. There is no replacement wrapper — call
+> `claude -p "<prompt>"` directly.
+
 # claude-p — bring `claude -p` back to subscription users
 
 > Use what you already paid for: `claude -p`-style automation on top of your
